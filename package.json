@@ -4,13 +4,13 @@
 	"private": true,
 	"scripts": {
 		"deploy": "wrangler deploy",
-		"dev": "wrangler dev",
+		"dev": "wrangler dev --port 38081",
 		"start": "wrangler dev",
 		"test": "vitest"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.7.5",
 		"vitest": "~3.0.7",
-		"wrangler": "^4.8.0"
+		"wrangler": "=3.105.0"
 	}
 }
