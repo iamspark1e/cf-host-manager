@@ -649,6 +649,29 @@ async function handleAdminInterface(request, env) {
 			<p></p>
 			<p><strong>请注意：当前Admin页面的认证与API的认证不是同一个账户名密码，但是共享同一个防暴力破解黑名单！</strong></p>
 		  </div>
+
+		  <div class="card">
+		  	<h2>Bash预设方式快速调用SSH</h2>
+			<pre>
+			# 环境变量配置（可覆盖默认值）
+export API_USER="your_username"    # API 用户名
+export API_PASS="your_password"    # API 密码
+export DEFAULT_SSH_PORT="22"       # 默认 SSH 端口
+
+# 动态 SSH 连接函数
+ssh_dynamic() {
+    local target_domain="$1"
+    local ssh_port="\${2:-$DEFAULT_SSH_PORT}"  # 如果未指定端口，则用默认值
+
+    if [ -z "$target_domain" ]; then
+        echo "Usage: ssh_dynamic <domain> [port]" >&2
+        return 1
+    fi
+
+    ssh -p "$ssh_port" "root@$(curl -s -u "$API_USER:$API_PASS" "https://your-domain.com/api/query/$target_domain")"
+}
+			</pre>
+		  </div>
 		</div>
 		
 		<!-- 主机名映射 -->
