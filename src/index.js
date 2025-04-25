@@ -21,6 +21,9 @@ async function handleRequest(request, env) {
 	} else if (url.pathname.startsWith('/api/query/')) {
 		// API查询路径
 		return handleAPIQuery(request, clientIP, env);
+	} else if (url.pathname === '/api/list') {
+		// 新增: IP列表导出路径
+		return handleIPList(request, clientIP, env);
 	} else {
 		return new Response('Not Found', { status: 404 });
 	}
@@ -101,6 +104,102 @@ async function handleAPIQuery(request, clientIP, env) {
 			'Cache-Control': 'no-store'
 		}
 	});
+}
+
+async function handleIPList(request, clientIP, env) {
+    // 检查IP是否在黑名单中
+    const blacklistData = await env.BLACKLIST.get(clientIP);
+    if (blacklistData) {
+        const blacklistInfo = JSON.parse(blacklistData);
+        if (blacklistInfo.expiresAt > Date.now()) {
+            return new Response('Access Denied: Your IP has been temporarily blocked', {
+                status: 403
+            });
+        } else {
+            // 黑名单已过期，删除记录
+            await env.BLACKLIST.delete(clientIP);
+        }
+    }
+
+    // 处理Basic认证
+    const authHeader = request.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return new Response('Authentication required', {
+            status: 401,
+            headers: {
+                'WWW-Authenticate': 'Basic realm="IP Query Service"'
+            }
+        });
+    }
+
+    // 获取配置
+    const configData = await env.CONFIG.get('service_config');
+    const config = configData ? JSON.parse(configData) : {
+        maxFailedAttempts: 5,
+        blacklistDuration: 7 * 24 * 60 * 60 * 1000, // 7天，以毫秒为单位
+        credentials: {
+            username: 'admin',
+            password: 'password'
+        }
+    };
+
+    // 验证凭据
+    const base64Credentials = authHeader.split(' ')[1];
+    const credentials = atob(base64Credentials);
+    const [username, password] = credentials.split(':');
+
+    if (username !== config.credentials.username || password !== config.credentials.password) {
+        // 认证失败，记录失败尝试
+        await recordFailedAttempt(clientIP, config, env);
+        return new Response('Authentication failed', { status: 401 });
+    }
+
+    // 认证成功，重置失败计数
+    await env.FAILED_ATTEMPTS.delete(clientIP);
+
+    // 获取所有主机名和IP映射
+    const hostIpPairs = [];
+    let hostListComplete = false;
+    let cursor = null;
+    
+    while (!hostListComplete) {
+        const listResult = await env.HOST_IP_MAPPINGS.list({ cursor });
+        for (const key of listResult.keys) {
+            const hostDataString = await env.HOST_IP_MAPPINGS.get(key.name);
+            let hostData;
+            try {
+                hostData = JSON.parse(hostDataString);
+                hostIpPairs.push({ 
+                    hostname: key.name, 
+                    ip: hostData.ip
+                });
+            } catch (e) {
+                // 如果解析失败，说明是旧格式，仅包含IP
+                hostIpPairs.push({ 
+                    hostname: key.name, 
+                    ip: hostDataString
+                });
+            }
+        }
+        
+        cursor = listResult.cursor;
+        hostListComplete = listResult.list_complete;
+    }
+
+    // 提取所有IP地址并去重
+    const uniqueIPs = [...new Set(hostIpPairs.map(pair => pair.ip))];
+    
+    // 生成IP列表，每行一个IP
+    const ipList = uniqueIPs.join('\n');
+    
+    // 返回IP列表
+    return new Response(ipList, {
+        headers: {
+            'Content-Type': 'text/plain',
+            'Content-Disposition': 'attachment; filename="whitelist"',
+            'Cache-Control': 'no-store'
+        }
+    });
 }
 
 async function recordFailedAttempt(clientIP, config, env) {
@@ -653,7 +752,7 @@ async function handleAdminInterface(request, env) {
 		  <div class="card">
 		  	<h2>Bash预设方式快速调用SSH</h2>
 			<pre>
-			# 环境变量配置（可覆盖默认值）
+# 环境变量配置（可覆盖默认值）
 export API_USER="your_username"    # API 用户名
 export API_PASS="your_password"    # API 密码
 export DEFAULT_SSH_PORT="22"       # 默认 SSH 端口
@@ -671,6 +770,11 @@ ssh_dynamic() {
     ssh -p "$ssh_port" "root@$(curl -s -u "$API_USER:$API_PASS" "https://your-domain.com/api/query/$target_domain")"
 }
 			</pre>
+		  </div>
+
+		  <div class="card">
+		  	<h2>获取系统内的IP白名单</h2>
+			<pre>curl -u admin:password -o whitelist https://your-domain.com/api/list</pre>
 		  </div>
 		</div>
 		
