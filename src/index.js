@@ -171,13 +171,13 @@ async function handleIPList(request, clientIP, env) {
                 hostData = JSON.parse(hostDataString);
                 hostIpPairs.push({ 
                     hostname: key.name, 
-                    ip: hostData.ip
+                    ip: hostData.ip.trim()
                 });
             } catch (e) {
                 // 如果解析失败，说明是旧格式，仅包含IP
                 hostIpPairs.push({ 
                     hostname: key.name, 
-                    ip: hostDataString
+                    ip: hostDataString.trim()
                 });
             }
         }
@@ -353,7 +353,7 @@ async function handleAdminInterface(request, env) {
       else if (action === 'updateHostMapping') {
         // 处理主机名和IP映射的更新
         const hostname = formData.get('hostname');
-        const ipAddress = formData.get('ipAddress');
+        const ipAddress = formData.get('ipAddress')?.trim();
         const remarks = formData.get('remarks') || '';
         
         if (hostname && ipAddress) {
@@ -368,7 +368,7 @@ async function handleAdminInterface(request, env) {
       else if (action === 'editHostMapping') {
         // 处理编辑主机名映射
         const hostname = formData.get('hostname');
-        const ipAddress = formData.get('ipAddress');
+        const ipAddress = formData.get('ipAddress')?.trim();
         const remarks = formData.get('remarks') || '';
         
         if (hostname && ipAddress) {
